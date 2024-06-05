@@ -80,24 +80,27 @@ const server = Bun.serve({
                 });
             case "/text":
                 const clientId = randomBytes(16).toString("hex")
-                byClientId[clientId] = {shadow:text,backupShadow:text,n:0}
+                byClientId[clientId] = {shadow:text,backupShadow:text,n:0,m:0,stack:[]}
                 return new Response(JSON.stringify({text,m:0,backup_m:0,clientId}));
             case "/sync":
                 let obj_for_catch = {}
                 try {
-                    const obj = await req.json()
-                    obj_for_catch = obj
-                    const fromClientId = byClientId[obj.clientId]
+                    const json = await req.json()
+                    obj_for_catch = json
+                    const fromClientId = byClientId[json.clientId]
 
                     let text1
-                    if (obj.m === fromClientId.m) {
+                    if (json.m === fromClientId.m) {
                         text1 = fromClientId.shadow
+                        if (fromClientId.stack.length && fromClientId.stack[0].m < json.m) {
+                            fromClientId.stack = fromClientId.stack.filter(v=>v.m >= json.m)
+                        }
                     } else {
                         text1 = fromClientId.backupShadow
                         fromClientId.stack = []
                     }
                     let text2 = text
-                    for (const n_and_patches of obj.stack) {
+                    for (const n_and_patches of json.stack) {
                         if (n_and_patches.n < fromClientId.n) {
                             continue
                         }
@@ -105,18 +108,21 @@ const server = Bun.serve({
                         text2 = obj_diff_match_patch.patch_apply(n_and_patches.patches, text2)[0]
                         ++fromClientId.n
                     }
-                    text = text2, fromClientId.shadow = fromClientId.backupShadow = text1, fromClientId.backup_m = obj.m, fromClientId.m = obj.m + 1
+                    text = text2, fromClientId.backupShadow = text1, fromClientId.backup_m = json.m, fromClientId.m = json.m
 
                     const diffs = obj_diff_match_patch.diff_main(text1,text2)
                     obj_diff_match_patch.diff_cleanupSemantic(diffs)
                     const patches = obj_diff_match_patch.patch_make(text1, diffs)
-                    fromClientId.backupShadow = text2
+                    fromClientId.shadow = text2
 
                     if (patches.length) {
                         fromClientId.stack.push({patches,m:fromClientId.m})
+                        ++fromClientId.m
                     }
 
-                    return new Response(JSON.stringify({n:fromClientId.n,stack:fromClientId.stack,m:fromClientId.m}));
+                    //if (Math.random() > 0.8) { //simulate packet drop, needs at least 2 clients
+                        return new Response(JSON.stringify({n:fromClientId.n,stack:fromClientId.stack,m:fromClientId.m}));
+                    //}
                 } catch (e) {
                     console.log(byClientId,obj_for_catch.clientId);
                     console.log(e)

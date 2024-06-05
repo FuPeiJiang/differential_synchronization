@@ -118,13 +118,14 @@ function network_synchronize() {
         body: JSON.stringify(obj),
     }).then(v=>v.json()).then(json=>{
         if (json.m > obj.m && json.stack.length) {
+            const bak_obj_m = obj.m
             obj.m = json.m
             let text1 = shadow
             let text2 = textarea.value
             let caret1 = textarea.selectionStart
             let caret2 = textarea.selectionEnd
             for (const m_and_patches of json.stack) {
-                if (m_and_patches.m < obj.m) {
+                if (m_and_patches.m < bak_obj_m) {
                     continue
                 }
 
@@ -160,7 +161,6 @@ function network_synchronize() {
                 }
                 text1 = obj_diff_match_patch.patch_apply(m_and_patches.patches, text1)[0]
                 text2 = obj_diff_match_patch.patch_apply(m_and_patches.patches, text2)[0]
-                ++obj.m
             }
             shadow = text1, textarea.value = text2, textarea.setSelectionRange(caret1,caret2)
         }
